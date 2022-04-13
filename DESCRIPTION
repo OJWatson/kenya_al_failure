@@ -1,0 +1,38 @@
+Package: alfkenya
+Type: Package
+Title: Analysis of AL failure in Kenya
+Version: 0.1.0
+Authors@R: c(
+  person("OJ", "Watson", email = "o.watson15@imperial.ac.uk", role = c("aut", "cre"))
+  )
+Description: Code repository for analysis into the treatment failure of AL in Kenya and 
+  further MDA potential implications. 
+License: MIT + file LICENSE
+Encoding: UTF-8
+LazyData: true
+Imports:
+    here,
+    cowplot,
+    ggplot2,
+    magrittr,
+    readxl,
+    haven,
+    rsatscan,
+    rgeoboundaries,
+    elevatr,
+    raster,
+    conflicted,
+    sf,
+    colorspace,
+    ggeffects,
+    sjPlot,
+    broom,
+    broom.mixed,
+    tableone,
+    caret,
+    dplyr,
+    rnaturalearth,
+    purrr
+Suggests:
+    devtools
+RoxygenNote: 7.1.2
