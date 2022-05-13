@@ -1,6 +1,7 @@
 library(tidyverse)
 library(haven)
 library(rdhs)
+devtools::load_all()
 
 # ------------------------------------------------------------------------------
 # 1. Read in our feed data

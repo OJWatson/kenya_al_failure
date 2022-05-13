@@ -85,7 +85,7 @@ write.csv(effs, cp_path("analysis/tables/Table1.csv"))
 
 
 # ------------------------------------------------------------------------------
-# 2. Table 2
+# 2. Supp Table 6 (previously Table 2)
 # ------------------------------------------------------------------------------
 
 mean_95ci <- function(x, n){
@@ -103,24 +103,69 @@ median_iqr <- function(x){
 
 }
 
-# create summaries
+# create summaries for data
 tbl2 <- feed %>% group_by(assay) %>%
   summarise(n = n(),
             pmgd = mean_95ci(oocystposneg, as.integer(oocystposneg>=0)),
-            ooc_prev = mean_95ci(posguts, gutdissected),
+            ooc_prev = median_iqr(oocystprevalence),
             ooc_dens = median_iqr(oocystdens),
+            pgd = mean_95ci(glandposneg, as.integer(glandposneg>=0)),
+            gland_prev = median_iqr(glandprevalence),
             pf16ct = median_iqr(pf16c),
             pf25ct = median_iqr(pf25c)
             ) %>% t()
 
-# p-values from simple t.test and wilcox due to random effects not being identifiable with reduced samples in feeding
-tbl2ps <- feed %>%
-  tableone::CreateTableOne(vars = c("oocystposneg", "oocystprevalence", "oocystdens", "pf16c", "pf25c"),
-                           strata = "assay" , data = .) %>%
-  print(nonnormal = c("oocystdens"), minMax = TRUE)
+# p-values from range of tests
 
-tbl2 <- cbind(tbl2, c("",tbl2ps[,3]))
-write.csv(tbl2, cp_path("analysis/tables/Table2.csv"))
+# Multivariate Logistic Regression for odds of mosquito and gland infection
+# collapse between 1 and 0 for bet_binomial (https://github.com/glmmTMB/glmmTMB/issues/507#issuecomment-513235407)
+feed_mod_dat <- feed %>% mutate(oocystprevalence = replace(oocystprevalence, which(oocystprevalence==100), 99.99),
+                                oocystprevalence = replace(oocystprevalence, which(oocystprevalence==0), 0.01),
+                                glandprevalence = replace(glandprevalence, which(glandprevalence==100), 99.99),
+                                glandprevalence = replace(glandprevalence, which(glandprevalence==0), 0.01))
+
+pmgd_mod <- lme4::glmer(
+  oocystposneg ~ 1 + assay + (1|homestead),
+  data = feed_mod_dat %>% mutate(assay = factor(assay, levels = c("MFA","DFA"))), family = "binomial")
+
+prev_mod <- glmmTMB::glmmTMB(
+  oocystprevalence/100 ~ 1 + assay + (1|homestead),
+  data = feed_mod_dat %>% mutate(assay = factor(assay, levels = c("MFA","DFA"))),
+  family = glmmTMB::beta_family())
+
+oocy_dens_mod <- lme4::glmer.nb(
+  oocystdens ~ 1 + assay + (1|homestead),
+  data = feed_mod_dat %>% mutate(assay = factor(assay, levels = c("MFA","DFA"))))
+
+gland_mod <- lme4::glmer(
+  glandposneg ~ 1 + assay + (1|homestead),
+  data = feed_mod_dat %>% mutate(assay = factor(assay, levels = c("MFA","DFA"))), family = "binomial")
+
+gland_prev_mod <- glmmTMB::glmmTMB(
+  glandprevalence/100 ~ 1 + assay + (1|homestead),
+  data = feed_mod_dat %>% mutate(assay = factor(assay, levels = c("MFA","DFA"))),
+  family = glmmTMB::beta_family())
+
+pf16_mod <- lmerTest::lmer(
+  pf16c ~ 1 + assay + (1|homestead),
+  data = feed_mod_dat %>% mutate(assay = factor(assay, levels = c("MFA","DFA"))))
+
+pf25_mod <- lmerTest::lmer(
+  pf25c ~ 1 + assay + (1|homestead),
+  data = feed_mod_dat %>% mutate(assay = factor(assay, levels = c("MFA","DFA"))))
+
+tbl2ps <- c(summary(pmgd_mod)$coefficients[2,4],
+            summary(prev_mod)$coefficients$cond[2,4],
+            summary(oocy_dens_mod)$coefficients[2,4],
+            summary(gland_mod)$coefficients[2,4],
+            summary(gland_prev_mod)$coefficients$cond[2,4],
+            summary(pf16_mod)$coefficients[2,5],
+            summary(pf25_mod)$coefficients[2,5])
+
+tbl2ps <- round(tbl2ps, 3)
+
+tbl2 <- cbind(tbl2, c("","",tbl2ps))
+write.csv(tbl2, cp_path("analysis/tables/supp_table_6.csv"))
 
 # ------------------------------------------------------------------------------
 # 3. Table 3
@@ -146,41 +191,57 @@ tbl3a <- rbind(
     rename(term = agecateg2)
   )
 
+boot_int <- function(x) {
+  meanfun <- function(data, i){
+d <- data[i, ]
+return(mean(d,na.rm=TRUE))
+}
+
+  bo <- boot::boot(as.data.frame(x), statistic=meanfun, R=1000)
+  ci <- round(boot::boot.ci(bo, type = "basic")$basic[4:5],1)
+  paste0(round(mean(x, na.rm = TRUE),1), " [", ci[1], " - ", ci[2], "]")
+}
+
 tbl3b <- rbind(
-  feed %>% select(subpf, posguts, gutdissected) %>% na.omit %>%
+  feed %>% select(subpf, oocystprevalence) %>% na.omit %>%
     group_by(subpf) %>%
-    summarise(is = mean_95ci(posguts, gutdissected)) %>%
+    summarise(is = boot_int(oocystprevalence)) %>%
     rename(term = subpf),
-  feed %>% select(subgf, posguts, gutdissected) %>% na.omit %>%
+  feed %>% select(subgf, oocystprevalence) %>% na.omit %>%
     group_by(subgf) %>%
-    summarise(is = mean_95ci(posguts, gutdissected)) %>%
+    summarise(is = boot_int(oocystprevalence)) %>%
     rename(term = subgf),
-  feed %>% select(pf_mono, posguts, gutdissected) %>% na.omit %>%
+  feed %>% select(pf_mono, oocystprevalence) %>% na.omit %>%
     group_by(pf_mono) %>%
-    summarise(is = mean_95ci(posguts, gutdissected)) %>%
+    summarise(is = boot_int(oocystprevalence)) %>%
     rename(term = pf_mono),
-  feed %>% select(agecateg2, posguts, gutdissected) %>% na.omit %>%
+  feed %>% select(agecateg2, oocystprevalence) %>% na.omit %>%
     group_by(agecateg2) %>%
-    summarise(is = mean_95ci(posguts, gutdissected)) %>%
+    summarise(is = boot_int(oocystprevalence)) %>%
     rename(term = agecateg2)
 )
 
-succ_mod1 <- glm(oocystposneg ~ 1 + subpf, feed, family = "binomial")
-succ_mod2 <- glm(oocystposneg ~ 1 + subgf, feed, family = "binomial")
-succ_mod3 <- glm(oocystposneg ~ 1 + pf_mono, feed, family = "binomial")
-succ_mod4 <- glm(oocystposneg ~ 1 + agecateg2, feed, family = "binomial")
+# binomial models for discrete success models
+succ_mod1 <- lme4::glmer(oocystposneg ~ 1 + subpf + (1|homestead), feed, family = "binomial")
+succ_mod2 <- lme4::glmer(oocystposneg ~ 1 + subgf + (1|homestead), feed, family = "binomial")
+succ_mod3 <- lme4::glmer(oocystposneg ~ 1 + pf_mono + (1|homestead), feed, family = "binomial")
+succ_mod4 <- lme4::glmer(oocystposneg ~ 1 + agecateg2 + (1|homestead), feed, family = "binomial")
 succ_mods <- list(succ_mod1, succ_mod2, succ_mod3, succ_mod4)
 
-prev_mod1 <- glm(oocystprevalence/100 ~ 1 + subpf, feed, family = "binomial")
-prev_mod2 <- glm(oocystprevalence/100 ~ 1 + subgf, feed, family = "binomial")
-prev_mod3 <- glm(oocystprevalence/100 ~ 1 + pf_mono, feed, family = "binomial")
-prev_mod4 <- glm(oocystprevalence/100 ~ 1 + agecateg2, feed, family = "binomial")
+feed_mod_dat <- feed %>% mutate(oocystprevalence = replace(oocystprevalence, which(oocystprevalence==100), 99.99),
+                            oocystprevalence = replace(oocystprevalence, which(oocystprevalence==0), 0.01))
+
+prev_mod1 <- glmmTMB::glmmTMB(oocystprevalence/100 ~ 1 + subpf + (1|homestead), feed_mod_dat, family = glmmTMB::beta_family())
+prev_mod2 <- glmmTMB::glmmTMB(oocystprevalence/100 ~ 1 + subgf + (1|homestead), feed_mod_dat, family = glmmTMB::beta_family())
+prev_mod3 <- glmmTMB::glmmTMB(oocystprevalence/100 ~ 1 + pf_mono + (1|homestead), feed_mod_dat, family = glmmTMB::beta_family())
+prev_mod4 <- glmmTMB::glmmTMB(oocystprevalence/100 ~ 1 + agecateg2 + (1|homestead), feed_mod_dat, family = glmmTMB::beta_family())
 prev_mods <- list(prev_mod1, prev_mod2, prev_mod3, prev_mod4)
 
 refs <- c("Microscopic asexual parasitaemia",
           "Microscopic gameotcytemia",
           "Pf + non-Pf infections",
-          "<6 years")
+          "<6 years",
+          "No Thrombocytopenia")
 
 succ_effs <- do.call(rbind, lapply(seq_along(succ_mods), function(x) {create_eff_ors(succ_mods[[x]], refs[x])})) %>%
   mutate(term = gsub("pf_mono|agecateg2", "", term)) %>%
@@ -210,7 +271,7 @@ tbl3 <- left_join(n1,succ_effs) %>%
   left_join(tbl3a) %>%
   select(term, N, is, or, p) %>%
   setNames(c("term","N","succ_is","succ_or","succ_p")) %>%
-  left_join(left_join(prev_effs, tbl3a) %>% select(term, is, or, p)) %>%
+  left_join(left_join(prev_effs, tbl3b) %>% select(term, is, or, p)) %>%
   setNames(c("Term", "N", "Infection Success","OR", "p-value","Infection Prevalence","OR", "p-value"))
 
 write.csv(tbl3, cp_path("analysis/tables/Table3.csv"))

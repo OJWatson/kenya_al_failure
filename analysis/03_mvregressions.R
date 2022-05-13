@@ -18,16 +18,16 @@ all$anemia <- factor(c("No Anemia", "Anemia")[all$anemia+1], levels = c("No Anem
 asex_mod <- lme4::glmer(
   pf ~ 1 + gender + agecateg2 + thromb + anemia + sickler + (1|stringid) + (1|homestead) + (1|cluster),
   data = all,
-  family = "binomial", control=glmerControl(optCtrl=list(maxfun=2e4))
+  family = "binomial", control=lme4::glmerControl(optCtrl=list(maxfun=2e4))
 )
-asex_mod <- update(asex_mod,start=getME(sex_mod,c("theta","fixef")),control=glmerControl(optCtrl=list(maxfun=1e5)))
+asex_mod <- update(asex_mod,start=lme4::getME(asex_mod,c("theta","fixef")),control=lme4::glmerControl(optCtrl=list(maxfun=1e5)))
 
 sex_mod <- lme4::glmer(
   gametocyte ~ 1 + gender + agecateg2 + thromb + anemia + sickler + cut_pfemia_mbf + (1|stringid) + (1|homestead) + (1|cluster),
   data = all,
-  family = "binomial", control=glmerControl(optCtrl=list(maxfun=2e4))
+  family = "binomial", control=lme4::glmerControl(optCtrl=list(maxfun=2e4))
 )
-sex_mod <- update(sex_mod,start=getME(sex_mod,c("theta","fixef")),control=glmerControl(optCtrl=list(maxfun=2e4)))
+sex_mod <- update(sex_mod,start=lme4::getME(sex_mod,c("theta","fixef")),control=lme4::glmerControl(optCtrl=list(maxfun=2e4)))
 
 # ------------------------------------------------------------------------------
 # aOR Plots

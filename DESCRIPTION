@@ -21,7 +21,6 @@ Imports:
     rgeoboundaries,
     elevatr,
     raster,
-    conflicted,
     sf,
     colorspace,
     ggeffects,
@@ -32,7 +31,11 @@ Imports:
     caret,
     dplyr,
     rnaturalearth,
-    purrr
+    purrr,
+    blme,
+    glmmTMB
 Suggests:
     devtools
 RoxygenNote: 7.1.2
+Remotes: 
+    wmgeolab/rgeoboundaries

@@ -2,7 +2,7 @@
 <!-- README.md is generated from README.Rmd. Please edit that file -->
 
 [![minimal R
-version](https://img.shields.io/badge/R%3E%3D-4.1.3-brightgreen.svg)](https://cran.r-project.org/)
+version](https://img.shields.io/badge/R%3E%3D-4.2.0-brightgreen.svg)](https://cran.r-project.org/)
 [![Licence](https://img.shields.io/github/license/mashape/apistatus.svg)](http://choosealicense.com/licenses/mit/)
 
 ## Research compendium for AL treatment failure in Kenya
@@ -60,11 +60,11 @@ generated.
 
 ### The R package
 
-This repository is organized as an R package. There are only a few R
+This repository is organized as an R package. There are no/negligable R
 functions exported in this package - the majority of the R code is in
-the analysis directory. The R package structure is here to help manage
-dependencies, to take advantage of continuous integration, and so we can
-keep file and data management simple.
+the analysis and src directory. The R package structure is here to help
+manage dependencies, to take advantage of continuous integration, and so
+we can keep file and data management simple.
 
 To download the package source as you see it on GitHub, for offline
 browsing, use this line at the shell prompt (assuming you have Git
@@ -77,13 +77,12 @@ git clone https://github.com/OJWatson/kenya_al_failure.git
 Once the download is complete, open the `kenya_al_failure.Rproj` in
 RStudio to begin working with the package and compendium files. We will
 endeavour to keep all package dependencies required listed in the
-DESCRIPTION. This has the advantage of allowing
-`devtools::install_dev_deps()` to install the required R packages needed
-to run the code in this repository. Then run `devtools::load_all(".")`
-to load the R functions in the package and you are ready to go through
-the analysis scripts. Lastly, we include the session Info
-(`sessionInfo()`) to help troubleshoot if the above steps have been
-taken and code is not working.
+DESCRIPTION.
+
+In addition we use `renv` to track package dependencies for
+reproducibility. Please use `renv::restore` to restore the state of the
+project and see <https://rstudio.github.io/renv/articles/renv.html> for
+more information.
 
 ### Licenses
 

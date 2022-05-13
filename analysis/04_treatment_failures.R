@@ -42,25 +42,56 @@ assign_tf <- function(pf) {
   return(tf)
 }
 
+non_na_check <- function(x, b) {
+  if(!is.na(x)) {
+    x == b
+  } else {
+    return(FALSE)
+  }
+}
+assign_transf <- function(pf_tf, oopn) {
+
+  tf <- rep(NA, length(pf_tf))
+
+  if(any(oopn == 1, na.rm = TRUE)){
+
+    # can't work out first in group in group
+    for(i in seq_along(oopn)[-1]) {
+      if(!is.na(oopn[i]) & !is.na(pf_tf[i-1])){
+        if(pf_tf[i-1] == 1) {
+        if(oopn[i] == 1) {
+          tf[i-1] <- 1
+        } else {
+          tf[i-1] <- 0
+        }
+        }
+    }
+    }
+  }
+
+  return(tf)
+}
+
 consecs <- all %>%
   filter(subjectid %in% unique(all %>% filter(pf == 1 | gametocyte == 1) %>% pull(subjectid))) %>%
   group_by(subjectid) %>%
   mutate(visit_grp = consec(visit)) %>%
-  #filter(visit_grp %in% names(which(table(visit_grp)>1))) %>%
   ungroup() %>%
   group_by(subjectid, visit_grp) %>%
   mutate(pf_tf = assign_tf(pf)) %>%
   mutate(gam_tf = assign_tf(gametocyte)) %>%
   mutate(pf_micro_tf = assign_tf(mbfpf)) %>%
   mutate(gam_micro_tf = assign_tf(mbfgam)) %>%
+  mutate(transf = assign_transf(pf_tf, oocystposneg)) %>%
   mutate(cluster = substr(homestead, 1,2))
 
 #-------------------------------------------------------------------------------
 # Model Treatment Failures
 #-------------------------------------------------------------------------------
 
-mod <- lme4::glmer(pf_tf ~ scale(age) + scale(visit_prev) + (1|homestead),
-                   data = consecs %>% filter(pf == 1 & !is.na(pf_tf)), family = "binomial")
+mod <- lme4::glmer(pf_tf ~ (age) + (visit_prev) + (1|homestead),
+                   data = consecs %>% filter(pf == 1 & !is.na(pf_tf)) %>% mutate(visit_prev = visit_prev/100),
+                   family = "binomial")
 mod <- update(mod,start=lme4::getME(mod,c("theta","fixef")), control=lme4::glmerControl(optCtrl=list(maxfun=1e5)))
 
 # explore the random effects
@@ -169,7 +200,7 @@ consecs <- consecs %>%
   mutate(gam_stat = replace(gam_stat, gametocyte == 1 & !is.na(assay) & oocystposneg, "Gametocyte +ve, Mosquito Infected")) %>%
   mutate(gam_stat = replace(gam_stat, gametocyte == 1 & !is.na(assay) & !oocystposneg, "Gametocyte +ve, Mosquito Not Infected"))
 
-fill_cols <- c("#dd5129", "#0f7ba2", "#43b284", "#fab255")
+fill_cols <- c("#0f7ba2", "#43b284", "#fab255", "#dd5129")
 tf_patterns_gg <- consecs %>%
   filter(homestead %in% refp_data$term[refp_data$psig == "High"]) %>%
   full_join(data.frame("stringid" = c("070901", "230305"), "age" = 99)) %>%
@@ -221,7 +252,7 @@ save_figs("treatment_failures", tf_gg, width = 16, height = 10)
 
 alldf <- consecs %>% ungroup %>%
   filter(visit_grp %in% names(which(table(visit_grp)>1))) %>%
-  filter(stringid %in% (consecs %>% filter(pf == 1) %>% group_by(stringid) %>% summarise(n = n()) %>% filter(n > 4) %>% pull(stringid)))
+  filter(stringid %in% (consecs %>% filter(pf == 1) %>% group_by(stringid) %>% summarise(n = n()) %>% filter(n > 0) %>% pull(stringid)))
 
 labeller <- as.list(
   alldf %>%
@@ -246,12 +277,15 @@ labeller_func <- function(variable, value){
   return(labeller[value])
 }
 
+for(i in 1:5){
+
 tf_patterns_gg <- alldf %>%
   ggplot(aes(visit, plu, group = as.factor(visit_grp))) +
   scale_fill_discrete() +
   geom_line(lwd = 0.25) +
   geom_point(aes(fill = as.factor(gam_stat), shape = as.factor(mbfpf)), stroke = 0.2, size = 2) +
-  facet_wrap(~stringid, ncol = 10, labeller = labeller_func) +
+  # facet_wrap(~stringid, ncol = 10, labeller = labeller_func) +
+  ggforce::facet_wrap_paginate(~stringid, ncol = 7, nrow = 12, labeller = labeller_func, page = i) +
   xlab("Visit Month") +
   ylab("Asexual Stage Ct Value") +
   theme_bw() +
@@ -260,16 +294,121 @@ tf_patterns_gg <- alldf %>%
     values = c("Gametocyte -ve" = fill_cols[1],
                "Gametocyte +ve, No Feeding Assay"=fill_cols[2],
                "Gametocyte +ve, Mosquito Not Infected" = fill_cols[3],
-               "Gametocyte +ve, Mosquito Infected" = fill_cols[4]), name = "Gametocyte Status and \nFeeding Assay Outcome") +
+               "Gametocyte +ve, Mosquito Infected" = fill_cols[4]), name = "Gametocyte Status and\nFeeding Assay Outcome:") +
   #scale_shape_manual(values = c("0"=21, "1" = 22), labels = c("1"="TRUE", "0"="FALSE"), name = "Gametocyte +ve") +
   scale_shape_manual(values = c("1"=21,"0"=22),
-                     labels = c("1"="TRUE", "0"="FALSE"), name = "Asexual Microscopy +ve") +
+                     labels = c("1"="TRUE", "0"="FALSE"), name = "Asexual Microscopy +ve:") +
   scale_x_continuous(breaks = c(0,3,6,9,12)) +
-  guides(fill=guide_legend(override.aes=list(shape=21, size = 4))) +
-  guides(shape=guide_legend(override.aes=list(fill="white", stroke = 1, size = 4))) +
+  guides(fill=guide_legend(override.aes=list(shape=21, size = 4), nrow = 2)) +
+  guides(shape=guide_legend(override.aes=list(fill="white", stroke = 1, size = 4), nrow = 2)) +
   theme(strip.background = element_rect(fill = "white"),
         strip.text = element_text(size = 8),
         legend.position = "top")
 
-save_figs("all_treatment_failures", tf_patterns_gg, width = 14, height = 18)
+save_figs(paste0("all_treatment_failures_",i), tf_patterns_gg, width = 10, height = 10)
 
+}
+qpdf::pdf_combine(
+  list.files(cp_path("analysis/plots/"),
+             pattern = "all_treatment_failures_\\d\\.pdf",
+             full.names = TRUE),
+  cp_path("analysis/plots/all_treatment_failures.pdf")
+  )
+
+
+# ------------
+# Numbers
+# ------------
+
+# two or more months sampling and gam
+c(all %>%
+  filter(stringid %in% (consecs %>% filter(gametocyte == 1) %>% pull(stringid) %>% unique)) %>%
+  group_by(subjectid) %>%
+  mutate(visit_grp = consec(visit)) %>%
+  summarise(m = max(table(visit_grp))>1) %>%
+  pull(m) %>% sum,
+  all$subjectid %>% unique %>% length)
+
+# two or more months sampling and pf
+c(all %>%
+    filter(stringid %in% (consecs %>% filter(pf == 1) %>% pull(stringid) %>% unique)) %>%
+    group_by(subjectid) %>%
+    mutate(visit_grp = consec(visit)) %>%
+    summarise(m = max(table(visit_grp))>1) %>%
+    pull(m) %>% sum,
+  all$subjectid %>% unique %>% length)
+
+# Tables of LPF episodes
+consecs %>%
+  filter(stringid %in% (consecs %>% filter(gametocyte == 1) %>% pull(stringid) %>% unique)) %>%
+  select(subjectid, visit, visit_grp, pf, gametocyte, gam_tf) %>%
+  ungroup %>%
+  group_by(subjectid) %>%
+  complete(visit = 1:12) %>%
+  mutate(gam_tf = replace_na(gam_tf, 0)) %>%
+  summarise(m = sum(diff(gam_tf)==-1)) %>%
+  pull(m) %>% table
+
+consecs %>%
+  filter(stringid %in% (consecs %>% filter(pf == 1) %>% pull(stringid) %>% unique)) %>%
+  select(subjectid, visit, visit_grp, pf, gametocyte, pf_tf) %>%
+  filter(visit_grp %in% names(which(table(visit_grp)>1))) %>%
+  ungroup %>%
+  group_by(subjectid) %>%
+  complete(visit = 1:12) %>%
+  mutate(pf_tf = replace_na(pf_tf, 0)) %>%
+  summarise(m = sum(diff(pf_tf)==-1)) %>%
+  pull(m) %>% table
+
+# Tables of LPF episodes
+
+lpf_lengths <- function(tf) {
+
+  if(!any(tf == 1, na.rm = TRUE)) {
+    return(0)
+  }
+
+  tf[tf == 0] <- NA
+  rl <- rle(is.na(tf))
+  i1 <- rl$lengths>=1 & rl$values
+
+  lst <- split(tf, rep(cumsum(c(TRUE, i1[-length(i1)])), rl$lengths)) %>%
+    lapply(na.omit) %>%
+    lengths() %>%
+    max()
+}
+
+prepf <- consecs %>%
+  filter(stringid %in% (consecs %>% filter(pf == 1) %>% pull(stringid) %>% unique)) %>%
+  select(subjectid, visit, visit_grp, pf, gametocyte, pf_tf) %>%
+  ungroup %>%
+  group_by(subjectid) %>%
+  complete(visit = 1:12)
+
+pregf <- consecs %>%
+  filter(stringid %in% (consecs %>% filter(gametocyte == 1) %>% pull(stringid) %>% unique)) %>%
+  select(subjectid, visit, visit_grp, pf, gametocyte, gam_tf) %>%
+  ungroup %>%
+  group_by(subjectid) %>%
+  complete(visit = 1:12)
+
+
+lpfgg <- rbind(
+  prepf %>% summarise(m = lpf_lengths(pf_tf)+1) %>% mutate(type = "Asexual Infection"),
+  pregf %>% summarise(m = lpf_lengths(gam_tf)+1) %>% mutate(type = "Sexual Infection")) %>%
+  ggplot(aes(x = m)) + geom_bar(stat = "count", fill = "white", color = "black") +
+  scale_x_continuous(breaks = 1:12) +
+  theme_bw() +
+  facet_wrap(~type) +
+  xlab("Duration in months of longest observed infection") +
+  ylab("Count")
+
+save_figs("lpf_duration", lpfgg, width = 8, height = 4)
+
+
+# numbers for the fig:
+cumsum((pregf %>% summarise(m = lpf_lengths(gam_tf)+1) %>% pull(m) %>% table))/
+  sum((pregf %>% summarise(m = lpf_lengths(gam_tf)+1) %>% pull(m) %>% table))
+
+cumsum((prepf %>% summarise(m = lpf_lengths(pf_tf)+1) %>% pull(m) %>% table))/
+  sum((prepf %>% summarise(m = lpf_lengths(pf_tf)+1) %>% pull(m) %>% table))

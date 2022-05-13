@@ -28,7 +28,7 @@ or_plot <- function(mod,
   }
 
   # format the labels and title
-  td$label <- paste0(round(td$.data$estimate,2), " (",
+  td$label <- paste0(round(td$estimate,2), " (",
                      round(td$conf.low,digits = 2), "-",
                      round(td$conf.high,digits = 2), ")")
   td <- rbind(td, td[1,])
@@ -50,7 +50,7 @@ or_plot <- function(mod,
     theme(text = element_text(size = 14), panel.spacing = unit(10,units = "pt"),) +
     xlab("Odds Ratio") + ylab("") +
     geom_text(inherit.aes = FALSE, data = td,
-              mapping = aes(y = .data$term, x = .data$x_pos, label = .data$label)) +
+              mapping = aes(y = .data$term, x = x_pos, label = .data$label)) +
     theme(legend.position = "none",
           panel.grid.major.y =  element_blank(),
           panel.grid.minor.y =  element_blank(),

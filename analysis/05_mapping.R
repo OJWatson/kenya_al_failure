@@ -4,15 +4,13 @@
 
 # Read in our data
 library(tidyverse)
-conflicted::conflict_prefer("select", "dplyr")
-conflicted::conflict_prefer("filter", "dplyr")
 library(rsatscan)
 library(rgeoboundaries)
 library(elevatr)
 library(raster)
 
 all <- readRDS(cp_path("analysis/data/derived/all.rds"))
-geo <- all %>% select(homestead, lat, long, cluster) %>% unique
+geo <- all %>% dplyr::select(homestead, lat, long, cluster) %>% unique
 
 # ------------------------------------------------------------------------------
 # 1. SATSCAN
@@ -26,8 +24,8 @@ mygeo2 <- geo[,-4] %>% group_by(homestead) %>%
 mycas2 <- all[,c("homestead", "pf", "visit")] %>%
   setNames(c("cluster", "case", "month")) %>%
   mutate(cluster = as.integer(cluster))
-mycas2 <- mycas2 %>% filter(cluster %in% mygeo2$cluster) %>% as.data.frame()
-mycont2 <- mycas2 %>% mutate(case  = as.integer(case != 1)) %>% filter(cluster %in% mygeo2$cluster)
+mycas2 <- mycas2 %>% dplyr::filter(cluster %in% mygeo2$cluster) %>% as.data.frame()
+mycont2 <- mycas2 %>% mutate(case  = as.integer(case != 1)) %>% dplyr::filter(cluster %in% mygeo2$cluster)
 
 # set up satscan runs
 td <- file.path(tempdir(), "home")
@@ -46,6 +44,23 @@ write.ss.prm(td, "mybase")
 
 # N.B. THIS WILL REQUIRE INSTALLING SATSCAN LOCALLY AND CHANGING THIS PATH
 sat_res = satscan(td, "mybase",sslocation = "/home/oj/SaTScan")
+supp_tab_5 <- sat_res$col %>%
+  mutate(prevalence = OBSERVED/POPULATION) %>%
+  dplyr::select(NUMBER_LOC, OBSERVED, POPULATION, RADIUS,
+                prevalence, REL_RISK, P_VALUE) %>%
+  mutate(P_VALUE = ifelse(P_VALUE < 0.0001, "<0.0001", round(P_VALUE, 4))) %>%
+  mutate(RADIUS = round(RADIUS, 3)) %>%
+  mutate(REL_RISK = round(REL_RISK, 2)) %>%
+  mutate(prevalence = round(prevalence*100, 1)) %>%
+  rename(Households = NUMBER_LOC,
+         Cases = OBSERVED,
+         Population = POPULATION,
+         `Radius (km)` = RADIUS,
+         Prevalence = prevalence,
+         RR = REL_RISK,
+         `p-value` = P_VALUE)
+
+write.csv(supp_tab_5, cp_path("analysis/tables/supp_table5.csv"))
 
 # ------------------------------------------------------------------------------
 # 2. Download relevant map shapes
@@ -53,7 +68,7 @@ sat_res = satscan(td, "mybase",sslocation = "/home/oj/SaTScan")
 
 # kenya shapes
 kenya_bound <- rgeoboundaries::geoboundaries("Kenya")
-kenya_bound2 <- rgeoboundaries::geoboundaries("Kenya", adm_lvl = "adm3") %>% filter(shapeName == "KISUMU RURAL")
+kenya_bound2 <- rgeoboundaries::geoboundaries("Kenya", adm_lvl = "adm3") %>% dplyr::filter(shapeName == "KISUMU RURAL")
 kenya_bound3 <- rgeoboundaries::geoboundaries("Kenya", adm_lvl = "adm3")
 
 # elevation data
@@ -109,12 +124,12 @@ map2 <- elevation_data %>%
   geom_point(aes(long, lat, fill = p), shape = 21, stroke = 0.2, color = "black", data = pf_mean, inherit.aes = FALSE, size = 3, alpha  = 0.75) +
   coord_sf() +
   scale_fill_gradient2(midpoint=0.5, low="blue", mid="white",
-                        high="red", space ="Lab", name = "Malaria Prevalence\n") +
+                       high="red", space ="Lab", name = "Malaria Prevalence\n") +
   xlim(c(34.4 , 34.7)) +
   ylim(c(-0.21,0.02)) +
   geom_sf(data = sf::st_as_sf(sat_res$shapeclust) %>%
             mutate(col = c("Coldspot", "Hotspot")[as.integer(REL_RISK>1)+1]) %>%
-            filter(P_VALUE < 0.05),
+            dplyr::filter(P_VALUE < 0.05),
           aes(color = col), fill = NA) +
   scale_color_manual(name = "Hotspot Score\n", values = c("Coldspot" = "Blue", "Hotspot" = "Red")) +
   labs(x = "Longitude", y = "Latitude")
@@ -124,3 +139,37 @@ map <- cowplot::plot_grid(map1, map2, ncol = 1,
                           align = "v", labels = c("a","b")) +
   theme(plot.background = element_rect(fill = "white"))
 save_figs("map", map, 8, 10)
+
+# ------------------------------------------------------------------------------
+# 4. Rainfall plot
+# ------------------------------------------------------------------------------
+
+rainfall <- read.csv(cp_path("analysis/data/raw/monthly_rainfall.csv")) %>%
+  mutate(visit = lubridate::ceiling_date(as.Date(lubridate::dmonths(visit) + as.Date("2015-05-31")), "month"))
+
+rainfall_gg <- all %>%
+  group_by(visit) %>%
+  summarise(Asexual = mean(pf),
+            Gametocyte = mean(gametocyte)) %>%
+  mutate(visit = lubridate::ceiling_date(as.Date(lubridate::dmonths(visit) + as.Date("2015-05-31")),"month")) %>%
+  pivot_longer(Asexual:Gametocyte) %>%
+  ggplot(aes(as.Date(visit), value, fill = name)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  geom_smooth(aes(y = rainfall/max(rainfall), x = as.Date(visit), color = "Rainfall"),
+              se = FALSE, span = 0.4,  data = rainfall, inherit.aes = FALSE) +
+  ylim(c(0,1)) +
+  scale_y_continuous(
+    name = "Parasite Prevalence\n",
+    sec.axis = sec_axis(~.*max(rainfall$rainfall), name="Monthly Rainfall (mm)\n", breaks = seq(0, 200, 20)),
+    breaks = seq(0, 1, 0.1),
+    labels = scales::label_percent()
+  ) +
+  theme_bw() +
+  theme(legend.position = "top", panel.grid.minor = element_blank(),
+        legend.text = element_text(size = 10), legend.title = element_text(size = 10)) +
+  scale_color_manual(values = "blue", name = "") +
+  scale_fill_manual(values = viridis::cividis(2, begin = 0.4, end = 0.9), name = "") +
+  scale_x_date(date_breaks = "months", date_labels = "%b-%y", limits = as.Date(c("2015-06-15","2016-06-15")), expand = c(0,0)) +
+  xlab("")
+
+save_figs("rainfall", rainfall_gg, 8, 4)
