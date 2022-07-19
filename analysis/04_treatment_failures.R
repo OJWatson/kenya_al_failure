@@ -85,6 +85,9 @@ consecs <- all %>%
   mutate(transf = assign_transf(pf_tf, oocystposneg)) %>%
   mutate(cluster = substr(homestead, 1,2))
 
+# proportion of feeds that were succesful and on individuals who failed the previous month
+consecs$transf %>% table
+
 #-------------------------------------------------------------------------------
 # Model Treatment Failures
 #-------------------------------------------------------------------------------
@@ -319,6 +322,10 @@ qpdf::pdf_combine(
 # ------------
 # Numbers
 # ------------
+
+# total infected at least once (asexual or sexual)
+all %>% filter(stringid %in% (consecs %>% filter(gametocyte == 1 | pf == 1) %>% pull(stringid) %>% unique)) %>%
+  pull(stringid) %>% unique %>% length
 
 # two or more months sampling and gam
 c(all %>%

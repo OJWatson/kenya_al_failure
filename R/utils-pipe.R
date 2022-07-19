@@ -17,6 +17,7 @@ NULL
 #' Bind list of data frames together
 #'
 #' @param x List of data.frames to bind together
+#' @export
 #' @examples {
 #'
 #' df1 <- data.frame("a" = 1, "b" = 2)
